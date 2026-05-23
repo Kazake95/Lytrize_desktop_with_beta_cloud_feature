@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=Lytrize
+Comment=Local-first data analysis platform
+Exec=/usr/local/bin/lytrize
+Icon=lytrize
+Type=Application
+Categories=Office;Analytics;DataVisualization;Utility;
+Terminal=false
+StartupNotify=true
+StartupWMClass=Lytrize
+# Wayland: compositor matches app_id (set via setDesktopFileName) to this filename
+# The filename must be "lytrize.desktop" and setDesktopFileName("lytrize") in gui.py
+X-GNOME-Autostart-enabled=false

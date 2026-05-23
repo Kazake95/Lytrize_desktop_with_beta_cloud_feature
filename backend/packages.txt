@@ -1,0 +1,4 @@
+# System packages required by Streamlit Community Cloud.
+# Add apt packages here if your app needs system-level dependencies.
+# Browser/Chromium libs (libnss3, libatk*, libgbm1, etc.) are NOT needed
+# for a pure data-analysis app and have been removed.

@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /opt/lytrize/venv/bin/python /opt/lytrize/desktop/launcher.py

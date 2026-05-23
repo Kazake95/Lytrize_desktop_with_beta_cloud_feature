@@ -1,0 +1,109 @@
+#!/bin/bash
+# postrm -- Post-removal script for the lytrize Debian package.
+#
+# Called by dpkg after the package files have been deleted.
+# Performs a COMPLETE cleanup: user service, icons, app directory, and all
+# Python venv/package directories that dpkg cannot remove automatically
+# because they are non-empty (Python writes .pyc and __pycache__ at runtime).
+#
+# USER DATA (~/.local/share/lytrize/):
+#   Contains lytrize.db (saved sessions), session tokens, theme prefs, and
+#   launcher preferences. The user is given a CHOICE: keep or delete.
+#   If running non-interactively (DEBIAN_FRONTEND=noninteractive or piped),
+#   data is preserved by default to avoid silent data loss.
+
+set -e
+
+TARGET_USER="${SUDO_USER:-$USER}"
+
+# ── 1. Stop and disable the systemd user service ──────────────────────────────
+# The DBus error "org.freedesktop.DBus.Error.NoReply" occurs when systemctl
+# --user is called via `su` inside a dpkg postscript — the user session bus
+# is not accessible from the root-owned dpkg process.  Fix: export
+# XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS so systemctl can find the bus.
+# If the runtime dir does not exist (headless / CI), skip systemctl entirely
+# and just remove the service file — dpkg does not need the service stopped.
+if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ]; then
+    _UID=$(id -u "$TARGET_USER" 2>/dev/null || echo "")
+    _RUNTIME="/run/user/${_UID}"
+    _SVC_FILE="/home/${TARGET_USER}/.config/systemd/user/lytrize.service"
+
+    if [ -n "$_UID" ] && [ -d "$_RUNTIME" ]; then
+        su "$TARGET_USER" -c "
+            export XDG_RUNTIME_DIR='${_RUNTIME}'
+            export DBUS_SESSION_BUS_ADDRESS='unix:path=${_RUNTIME}/bus'
+            systemctl --user stop    lytrize 2>/dev/null || true
+            systemctl --user disable lytrize 2>/dev/null || true
+            systemctl --user daemon-reload   2>/dev/null || true
+        " 2>/dev/null || true
+    fi
+    # Always remove the service file regardless of whether systemctl succeeded
+    rm -f "$_SVC_FILE" 2>/dev/null || true
+fi
+
+# ── 2. Remove icons from the hicolor theme ────────────────────────────────────
+for SIZE in 16 22 24 32 48 64 96 128 256 scalable; do
+    rm -f "/usr/share/icons/hicolor/${SIZE}x${SIZE}/apps/lytrize.png" 2>/dev/null || true
+    rm -f "/usr/share/icons/hicolor/${SIZE}/apps/lytrize.png"         2>/dev/null || true
+done
+rm -f /usr/share/icons/hicolor/scalable/apps/lytrize.png 2>/dev/null || true
+rm -f /usr/share/pixmaps/lytrize.png                     2>/dev/null || true
+
+# ── 3. Force-remove the entire /opt/lytrize installation directory ────────────
+# dpkg removes the files it installed but leaves non-empty directories
+# (Python venv creates hundreds of extra files at runtime that dpkg
+# never tracked). We remove the whole tree here.
+if [ -d /opt/lytrize ]; then
+    rm -rf /opt/lytrize
+fi
+
+# ── 4. User data directory ────────────────────────────────────────────────────
+# ~/.local/share/lytrize/ holds: lytrize.db (saved sessions & accounts),
+# session.token, session.user, session.theme, launcher_prefs.json.
+# These are NOT removed by dpkg automatically — we ask the user.
+_USER_DATA_DIR=""
+if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ]; then
+    _USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6 2>/dev/null || echo "")
+    if [ -n "$_USER_HOME" ]; then
+        _USER_DATA_DIR="$_USER_HOME/.local/share/lytrize"
+    fi
+fi
+
+if [ -n "$_USER_DATA_DIR" ] && [ -d "$_USER_DATA_DIR" ]; then
+    # Check whether we're running interactively (terminal attached, not piped)
+    _INTERACTIVE=false
+    if [ -t 0 ] && [ "${DEBIAN_FRONTEND:-}" != "noninteractive" ]; then
+        _INTERACTIVE=true
+    fi
+
+    if [ "$_INTERACTIVE" = "true" ]; then
+        echo ""
+        echo "Lytrize user data found at: $_USER_DATA_DIR"
+        echo "This contains your saved analysis sessions and account data."
+        echo ""
+        printf "Remove user data? This cannot be undone. [y/N] "
+        read -r _ANSWER </dev/tty || _ANSWER="n"
+        case "$_ANSWER" in
+            [Yy]*)
+                rm -rf "$_USER_DATA_DIR"
+                echo "User data removed."
+                ;;
+            *)
+                echo "User data kept at: $_USER_DATA_DIR"
+                echo "You can delete it manually if you wish."
+                ;;
+        esac
+    else
+        # Non-interactive (CI, apt-get -y, etc.) — preserve data by default.
+        # The user can delete manually: rm -rf ~/.local/share/lytrize
+        echo "Non-interactive mode: user data preserved at: $_USER_DATA_DIR"
+        echo "To remove manually: rm -rf $_USER_DATA_DIR"
+    fi
+fi
+
+# ── 5. Refresh desktop / icon caches ─────────────────────────────────────────
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+update-desktop-database /usr/share/applications      2>/dev/null || true
+
+echo "Lytrize fully removed. No files remain."
+exit 0

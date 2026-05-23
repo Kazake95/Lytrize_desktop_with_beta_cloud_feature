@@ -1,0 +1,15 @@
+Package: lytrize
+Version: 1.0
+Architecture: amd64
+Maintainer: Lytrize <vnat8638@gmail.com>
+Depends: python3 (>= 3.11), libgl1, libglib2.0-0, libxcb-cursor0
+Recommends: chromium-browser | google-chrome-stable | firefox
+Description: Lytrize — Offline Data Analysis Platform
+ Analyse CSV and Excel files locally with interactive Plotly charts,
+ saved dashboards, KPI cards, and optional Supabase cloud sync.
+ .
+ Features: distribution analysis, time series, correlation, outlier
+ detection, categorical charts, map plots, and more.
+ .
+ Runs entirely offline. Supabase sync is optional and configured
+ inside the app under Settings → Sync.

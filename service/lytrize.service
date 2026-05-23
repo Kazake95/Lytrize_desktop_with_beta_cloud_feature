@@ -1,0 +1,16 @@
+[Unit]
+Description=Lytrize Local Analytics Service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lytrize/backend
+Environment=LYTRIZE_DB_PATH=%h/.local/share/lytrize/lytrize.db
+ExecStart=/opt/lytrize/venv/bin/python -m streamlit run /opt/lytrize/backend/app.py \
+    --server.port 8501 \
+    --server.address 127.0.0.1 \
+    --server.headless true
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

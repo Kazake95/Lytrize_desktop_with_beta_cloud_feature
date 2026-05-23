@@ -1,0 +1,62 @@
+#!/bin/bash
+set -e
+
+VENV=/opt/lytrize/venv
+ASSETS=/opt/lytrize/backend/assets
+
+# Resolve icon case-insensitively (Linux FS is case-sensitive)
+ICON_SRC=""
+for candidate in "$ASSETS/lytrize.png" "$ASSETS/Lytrize.png" "$ASSETS/icon.png"; do
+    if [ -f "$candidate" ]; then
+        ICON_SRC="$candidate"
+        break
+    fi
+done
+if [ -z "$ICON_SRC" ]; then
+    echo "WARNING: No icon file found in $ASSETS — panel icon will be missing." >&2
+fi
+
+# Wipe all __pycache__ dirs so Python re-compiles from the newly installed
+# .py files rather than using stale bytecode from a previous install.
+find /opt/lytrize/backend -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+find /opt/lytrize/backend -name '*.pyc' -o -name '*.pyo' | xargs rm -f 2>/dev/null || true
+
+# Re-link venv to this machine's python3 (no downloads, just fixes symlinks)
+echo "Linking Lytrize to system Python..."
+python3 -m venv --upgrade "$VENV" 2>/dev/null || true
+
+# Create user data directory
+mkdir -p "$HOME/.local/share/lytrize"
+
+# Permissions
+chmod 755 /opt/lytrize/desktop/launcher.py 2>/dev/null || true
+chmod 755 /opt/lytrize/desktop/gui.py      2>/dev/null || true
+find "$VENV/bin" -type f -exec chmod 755 {} \; 2>/dev/null || true
+
+# Install icon into hicolor theme at every standard size
+if [ -n "$ICON_SRC" ]; then
+    for SIZE in 16 22 24 32 48 64 96 128 256; do
+        DIR="/usr/share/icons/hicolor/${SIZE}x${SIZE}/apps"
+        mkdir -p "$DIR"
+        # Resize if convert (ImageMagick) is available, otherwise copy as-is
+        if command -v convert >/dev/null 2>&1; then
+            convert "$ICON_SRC" -resize "${SIZE}x${SIZE}" "$DIR/lytrize.png" 2>/dev/null \
+                || cp "$ICON_SRC" "$DIR/lytrize.png"
+        else
+            cp "$ICON_SRC" "$DIR/lytrize.png"
+        fi
+    done
+    mkdir -p /usr/share/icons/hicolor/scalable/apps
+    cp "$ICON_SRC" /usr/share/icons/hicolor/scalable/apps/lytrize.png
+    mkdir -p /usr/share/pixmaps
+    cp "$ICON_SRC" /usr/share/pixmaps/lytrize.png
+fi
+
+# Refresh icon and desktop caches
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+update-desktop-database /usr/share/applications           2>/dev/null || true
+xdg-desktop-menu forceupdate                              2>/dev/null || true
+
+echo "Lytrize installed successfully."
+echo "Launch from your application menu or run: lytrize"
+exit 0
